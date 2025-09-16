@@ -1,58 +1,78 @@
-import { readdirSync, unlinkSync, existsSync, statSync } from "fs";
-import { join } from "path";
+import { readdirSync, unlinkSync, existsSync, statSync } from 'fs'
+import { join } from 'path'
 
-/** 任务管理器 */
-const taskMap = new Map<string, number>();
+/**
+ * 任务管理器
+ * 用于管理任务ID和任务状态的映射关系
+ * @type {Map<string, number>}
+ */
+const taskMap = new Map<string, number>()
 
-/** 文件复用锁，防止多个任务同时复用同一文件 */
-const reusableFileLocks = new Set<string>();
+/**
+ * 文件复用锁集合
+ * 防止多个任务同时复用同一文件，避免竞态条件
+ * @type {Set<string>}
+ */
+const reusableFileLocks = new Set<string>()
 
-/** 创建新任务 */
+/**
+ * 创建新任务
+ * @function createTask
+ * @param {string} name - 任务名称
+ * @returns {string} 任务唯一标识符
+ */
 export function createTask(name: string): string {
   // 使用更短的时间戳格式
-  const timestamp = (Date.now() % 1000000).toString(36);
-  const random = Math.random().toString(36).substring(2, 6);
-  const taskId = `${name}_${timestamp}_${random}`;
+  const timestamp = (Date.now() % 1000000).toString(36)
+  const random = Math.random().toString(36).substring(2, 6)
+  const taskId = `${name}_${timestamp}_${random}`
   // 将任务添加到任务管理器
-  taskMap.set(taskId, Date.now());
-  return taskId;
+  taskMap.set(taskId, Date.now())
+  return taskId
 }
 
-/** 清理已完成任务 */
+/**
+ * 清理已完成任务
+ * @function cleanupTask
+ * @param {string} task极 - 任务ID
+ */
 export function cleanupTask(taskId: string): void {
-  const task = taskMap.get(taskId);
-  if (task) taskMap.delete(taskId);
+  const task = taskMap.get(taskId)
+  if (task) taskMap.delete(taskId)
 }
 
 /**
  * 查找并原子锁定可复用的已完成任务文件
+ * @function findAndLockReusableFile
+ * @param {string} targetDir - 目标目录路径
+ * @returns {string|null} 可复用的文件名，如果没有则返回null
  */
 export function findAndLockReusableFile(targetDir: string): string | null {
   try {
-    if (!existsSync(targetDir)) return null;
-    const files = readdirSync(targetDir).filter((f) => f.endsWith(".html"));
+    if (!existsSync(targetDir)) return null
+    const files = readdirSync(targetDir).filter((f) => f.endsWith('.html'))
 
     // 获取文件信息并按修改时间排序（最旧的优先）
     const fileInfos = files
       .map((file) => {
-        const filePath = join(targetDir, file);
-        const stats = existsSync(filePath) ? statSync(filePath) : null;
+        const filePath = join(targetDir, file)
+        const stats = existsSync(filePath) ? statSync(filePath) : null
         return {
           file,
           filePath,
           taskId: file,
           mtime: stats ? stats.mtime.getTime() : 0,
-        };
+        }
       })
-      .sort((a, b) => a.mtime - b.mtime);
+      .sort((a, b) => a.mtime - b.mtime)
 
     // 原子锁定：使用同步锁机制防止竞态条件
-    const minAge = 5000; // 文件必须至少5秒前创建，确保任务已完成
-    const now = Date.now();
+    const minAge = 5000 // 文件必须至少5秒前创建，确保任务已完成
+    const now = Date.now()
 
     for (const fileInfo of fileInfos) {
-      const { file, filePath, taskId, mtime } = fileInfo;
-      const fileAge = now - mtime;
+      const { file, filePath, taskId, mtime } = fileInfo
+      const fileAge = now - mtime
 
       // 原子检查：一次性检查所有条件并立即锁定
       if (
@@ -62,91 +82,100 @@ export function findAndLockReusableFile(targetDir: string): string | null {
       ) {
         // 立即尝试锁定文件（原子操作）
         if (!reusableFileLocks.has(filePath)) {
-          reusableFileLocks.add(filePath);
+          reusableFileLocks.add(filePath)
 
           // 双重检查：锁定后再次确认任务状态
           if (!taskMap.has(taskId)) {
-            return file;
+            return file
           } else {
             // 如果任务状态发生变化，释放锁定
-            reusableFileLocks.delete(filePath);
+            reusableFileLocks.delete(filePath)
           }
         }
       }
     }
 
-    return null;
+    return null
   } catch (error) {
-    console.error("[jsxp] 查找可复用文件失败:", error);
-    return null;
+    console.error('[jsxp] 查找可复用文件失败:', error)
+    return null
   }
 }
 
 /**
  * 释放文件复用锁
+ * @function releaseReusableLock
+ * @param {string} filePath - 文件路径
  */
 export function releaseReusableLock(filePath: string): void {
   if (reusableFileLocks.has(filePath)) {
-    reusableFileLocks.delete(filePath);
+    reusableFileLocks.delete(filePath)
   }
 }
 
 /**
  * 清理已完成任务的HTML文件
+ * @function cleanupCompletedFiles
+ * @param {string} targetDir - 目标目录路径
+ * @param {number} [keepCount=2] - 保留的文件数量，默认为2
  */
 export function cleanupCompletedFiles(
   targetDir: string,
   keepCount: number = 2
 ): void {
   try {
-    if (!existsSync(targetDir)) return;
+    if (!existsSync(targetDir)) return
     const files = readdirSync(targetDir)
-      .filter((f) => f.endsWith(".html"))
+      .filter((f) => f.endsWith('.html'))
       .map((file) => {
-        const filePath = join(targetDir, file);
+        const filePath = join(targetDir, file)
         return {
           file,
           filePath,
           isActive: taskMap.has(file),
-        };
-      });
+        }
+      })
 
     // 获取已完成的文件（不在taskMap中且未被锁定的）
     const completedFiles = files.filter(
       (f) => !f.isActive && !reusableFileLocks.has(f.filePath)
-    );
+    )
     // 如果已完成文件数量超过保留数量，删除多余的
     if (completedFiles.length > keepCount) {
-      const filesToDelete = completedFiles.slice(keepCount);
+      const filesToDelete = completedFiles.slice(keepCount)
       filesToDelete.forEach(({ filePath, file }) => {
         try {
           // 再次检查文件是否被锁定（防止竞态条件）
           if (!reusableFileLocks.has(filePath)) {
-            unlinkSync(filePath);
+            unlinkSync(filePath)
           }
         } catch (error) {
-          console.error(`[jsxp] 删除文件失败 ${file}:`, error);
+          console.error(`[jsxp] 删除文件失败 ${file}:`, error)
         }
-      });
+      })
     }
   } catch (error) {
-    console.error("[jsxp] 清理已完成文件失败:", error);
+    console.error('[jsxp] 清理已完成文件失败:', error)
   }
 }
 
 /**
  * 启动定时清理器
+ * @function startCleanupTimer
+ * @param {string} targetDir - 目标目录路径
+ * @param {number} [intervalMinutes=5] - 清理间隔分钟数，默认为5
+ * @param {number} [keepCount=2] - 保留的文件数量，默认为2
  */
 export function startCleanupTimer(
   targetDir: string,
   intervalMinutes: number = 5,
   keepCount: number = 2
 ): void {
-  const intervalMs = intervalMinutes * 60 * 1000;
+  const intervalMs = intervalMinutes * 60 * 1000
   setInterval(() => {
-    cleanupCompletedFiles(targetDir, keepCount);
-  }, intervalMs);
-  console.log(`[jsxp] 定时清理器已启动，每 ${intervalMinutes} 分钟清理一次`);
+    cleanupCompletedFiles(targetDir, keepCount)
+  }, intervalMs)
+  console.log(`[jsxp] 定时清理器已启动，每 ${intervalMinutes} 分钟清理一次`)
 }
 
-export { taskMap };
+export { taskMap }

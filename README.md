@@ -1,15 +1,16 @@
-# JSXP
+# JSXP-MOYV
 
-一个强大的 TypeScript React 组件截图库，使用 Playwright 实现高质量的组件截图功能。
+一个基于 Playwright 的高性能 React TSX 组件截图库，支持服务器渲染和热重载。
 
 ## ✨ 特性
 
-- 🖼️ 支持 React TSX 组件截图
-- 🚀 基于 Playwright 的高性能浏览器渲染
-- 📦 开箱即用的 TypeScript 支持
-- 🔧 可配置的截图选项
-- ⚡ 内置任务队列和并发控制
-- 🌐 提供服务器端渲染服务
+- 🖼️ 支持 React TSX 组件实时渲染和截图
+- 🚀 基于 Playwright 的高性能浏览器渲染引擎
+- 📦 完整的 TypeScript 类型支持
+- ⚡ 智能任务队列和并发控制（最大 15 并发）
+- 🌐 内置 Koa 服务器，支持热重载和静态文件服务
+- 🔧 资源缓存和文件复用机制，提升性能
+- 🎯 支持直接渲染和文件渲染两种模式
 
 ## 📦 安装
 
@@ -23,139 +24,212 @@ pnpm add jsxp-moyv
 
 ## 🚀 快速开始
 
-### 基本使用
+### 基本使用 - 渲染 React 组件
 
 ```typescript
-import { render, defineConfig } from "jsxp-moyv";
+import { render, Component } from 'jsxp-moyv'
+import React from 'react'
 
-// 定义配置
-const config = defineConfig({
-  maxConcurrent: 4, // 最大并发数
-  timeout: 30000, // 超时时间(毫秒)
-});
-
-// 渲染组件并截图
-async function captureComponent() {
-  const result = await render(
-    `import React from 'react';
-    
-    function MyComponent() {
-      return <div style={{ padding: 20, background: '#f0f0f0' }}>
+// 方式1: 使用render函数
+const screenshotBuffer = await render(
+  {
+    component: (
+      <div
+        style={{
+          padding: 20,
+          background: 'linear-gradient(45deg, #ff6b6b, #4ecdc4)',
+        }}
+      >
         <h1>Hello JSXP!</h1>
-        <p>这是一个示例组件</p>
+        <p>高性能React组件截图</p>
       </div>
-    }`,
-    "MyComponent",
-    {
-      width: 800,
-      height: 600,
+    ),
+    name: 'MyComponent',
+  },
+  {
+    selector: 'body',
+    screenshot: {
+      type: 'jpeg',
       quality: 90,
-    }
-  );
+    },
+  }
+)
 
-  console.log("截图保存路径:", result.filePath);
-  console.log("截图数据:", result.buffer);
-}
+// 方式2: 使用Component类
+const component = new Component()
+const html = await component.compile({
+  component: <MyApp />,
+  create: false,
+  server: true,
+})
 ```
 
 ### 服务器模式
 
 ```typescript
-import { createServer } from "jsxp-moyv";
+import { createServer } from 'jsxp-moyv'
 
-// 创建截图服务器
-const server = createServer({
-  port: 3000,
-  maxConcurrent: 4,
-});
+// 创建开发服务器（支持热重载）
+createServer({
+  port: 8080,
+  host: '127.0.0.1',
+  statics: ['public', 'assets'],
+  routes: {
+    '/': {
+      component: <HomePage />,
+    },
+    '/dashboard': {
+      component: <Dashboard />,
+    },
+  },
+})
 
-// 启动服务器
-server.start().then(() => {
-  console.log("JSXP 截图服务器已启动在 http://localhost:3000");
-});
+// 命令行启动
+// node --jsxp-server
+```
+
+### 内置组件
+
+```typescript
+import {
+  BackgroundImage,
+  LinkESM,
+  LinkESMFile,
+  LinkStyleSheet
+} from 'jsxp-moyv'
+
+// 背景图片组件
+<BackgroundImage
+  src={['/bg1.jpg', '/bg2.jpg']}
+  size="cover"
+  style={{ opacity: 0.8 }}
+/>
+
+// ESM 模块引入
+<LinkESM src="/module.js" />
+
+// 文件内容内联
+<LinkESMFile src="/path/to/module.js" />
+
+// 样式表引入
+<LinkStyleSheet src="/styles.css" />
 ```
 
 ## 📖 API 文档
 
-### `render(componentCode: string, componentName: string, options?: RenderOptions)`
+### 核心函数
 
-渲染并截图 React 组件。
+#### `render(comOptions: ComponentCreateOptionType, pupOptions?: PupOptions): Promise<Buffer>`
 
-**参数：**
-
-- `componentCode`: 组件的 TypeScript/JavaScript 代码字符串
-- `componentName`: 要渲染的组件名称
-- `options`: 可选配置项
-  - `width`: 截图宽度（默认: 1200）
-  - `height`: 截图高度（默认: 800）
-  - `quality`: 图片质量 1-100（默认: 80）
-  - `type`: 图片类型 'png' | 'jpeg'（默认: 'png'）
-
-### `createServer(options?: ServerOptions)`
-
-创建截图服务器实例。
+渲染 React 组件并返回截图 Buffer。
 
 **参数：**
 
-- `port`: 服务器端口（默认: 3000）
-- `maxConcurrent`: 最大并发请求数（默认: 2）
+- `comOptions`: 组件配置选项
 
-### `defineConfig(config: Config)`
+  - `component: React.ReactNode` - React 组件
+  - `name?: string` - 组件名称（不要包含.html）
+  - `path?: string` - 输出路径扩展
+  - `create?: boolean` - 是否创建文件（默认 true）
+  - `server?: boolean` - 是否服务器模式（默认 false）
 
-定义全局配置。
+- `pupOptions`: 浏览器选项
+  - `goto?: any` - 页面跳转选项
+  - `selector?: string` - 元素选择器（默认'body'）
+  - `screenshot?: any` - 截图选项
 
-### `getProcessing()`
+#### `createServer(userConfig?: Partial<JSXPOptions>): Promise<void>`
 
-获取当前正在处理的任务数量。
+创建开发服务器。
 
-## 🛠️ 高级用法
+**配置选项：**
 
-### 使用自定义组件
+- `port?: number` - 端口号（默认 8080）
+- `host?: string` - 主机地址（默认'127.0.0.1'）
+- `prefix?: string` - URL 前缀
+- `statics?: string | string[]` - 静态文件目录
+- `routes?: Record<string, { component?: React.ReactNode }>` - 路由配置
 
-```typescript
-import { Component, BackgroundImage } from "jsxp-moyv";
+#### `defineConfig(config: any): any`
 
-// 创建自定义组件
-const MyCustomComponent = Component(({ title, content }) => (
-  <div style={{ padding: 20, border: "1px solid #ccc" }}>
-    <h2>{title}</h2>
-    <p>{content}</p>
-    <BackgroundImage src="/path/to/image.png" />
-  </div>
-));
-```
+定义配置（当前为直接返回配置对象）。
 
-### 任务管理
+### 工具函数
+
+#### `getProcessing(): { processingCount: number, queueLength: number, isProcessing: boolean }`
+
+获取任务队列状态。
+
+#### 任务管理函数
 
 ```typescript
 import {
-  taskMap,
-  createTask,
-  cleanupTask,
-  cleanupCompletedFiles,
-} from "jsxp-moyv";
-
-// 创建截图任务
-const taskId = createTask("component-screenshot", {
-  componentCode: "...",
-  componentName: "MyComponent",
-});
-
-// 清理已完成的任务文件
-cleanupCompletedFiles();
+  taskMap, // 任务映射表
+  createTask, // 创建任务
+  cleanupTask, // 清理任务
+  findAndLockReusableFile, // 查找可复用文件
+  releaseReusableLock, // 释放文件锁
+  cleanupCompletedFiles, // 清理已完成文件
+  startCleanupTimer, // 启动清理定时器
+} from 'jsxp-moyv'
 ```
 
-## 🔧 配置选项
+## 🛠️ 高级配置
 
-在项目根目录创建 `.browserrc.cjs` 文件来自定义浏览器配置：
+### 浏览器配置 (.browserrc.cjs)
+
+项目根目录下的 `.browserrc.cjs` 文件会自动被包含在 npm 包中：
 
 ```javascript
 module.exports = {
-  headless: true,
-  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-  defaultViewport: {
-    width: 1200,
-    height: 800,
-  },
-};
+  executablePath: '/path/to/chrome', // 自动检测系统浏览器
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+}
 ```
+
+### TypeScript 类型
+
+完整类型定义：
+
+```typescript
+import type {
+  JSXPOptions,
+  ComponentCreateOptionType,
+  RenderOptions,
+  ObtainProps,
+} from 'jsxp-moyv'
+```
+
+## 🔧 开发指南
+
+### 项目结构
+
+```
+├── components/          # React组件
+│   ├── BackgroundImage
+│   ├── LinkESM
+│   └── LinkStyles
+├── server/             # 服务器相关
+│   ├── index        # 主服务器
+│   ├── main         # 命令行入口
+│   └── refreshScript # 热重载脚本
+├── utils/              # 工具函数
+│   ├── cluster      # 浏览器池管理
+│   ├── component   # 组件编译
+│   ├── queue        # 任务队列
+│   └── taskmanager  # 任务管理
+├── types           # 类型定义
+├── config          # 配置函数
+├── render          # 主渲染函数
+└── index           # 入口文件
+```
+
+### 构建项目
+
+```bash
+npm run build
+```
+
+## 📄 许可证
+
+MIT License

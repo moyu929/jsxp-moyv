@@ -1,11 +1,20 @@
 import { chromium, Page, Browser, BrowserContext } from 'playwright'
-import path from 'path'
-import fs from 'fs'
+import * as path from 'path'
+import * as fs from 'fs'
 
 // 浏览器管理器实例
 let browserPoolInstance: BrowserPoolManager | null = null
 
-/** 资源缓存项接口 */
+/**
+ * 资源缓存项接口
+ * @interface ResourceCacheItem
+ * @property {Buffer} body - 资源内容，存储为Buffer格式
+ * @property {Record<string, string>} headers - HTTP响应头信息
+ * @property {number} [status] - HTTP状态码（可选）
+ * @property {number} usageCount - 使用次数
+ * @property {number} createdAt - 加入时间戳
+ * @property {number} lastUsedAt - 最后使用时间
+ */
 interface ResourceCacheItem {
   /** 资源内容，存储为Buffer格式 */
   body: Buffer
@@ -21,7 +30,19 @@ interface ResourceCacheItem {
   lastUsedAt: number
 }
 
-/** 任务数据结构定义 */
+/**
+ * 任务数据结构定义
+ * @interface TaskData
+ * @property {string} taskId - 任务唯一标识符
+ * @property {'direct' | 'file'} type - 任务类型：direct=直接渲染HTML内容，file=从文件加载
+ * @property {string} [htmlContent] - HTML内容字符串（type为direct时使用）
+ * @property {string} [htmlFilePath] - HTML文件路径（type为file时使用）
+ * @property {string} [virtualUrl] - 虚拟URL，用于资源路径解析
+ * @property {Object} [PupOptions] - Playwright页面选项配置
+ * @property {any} [PupOptions.goto] - 页面导航选项（如timeout、waitUntil等）
+ * @property {string} [PupOptions.selector] - 目标元素选择器，默认为"body"
+ * @property {any} [PupOptions.screenshot] - 截图选项（如quality、type等）
+ */
 interface TaskData {
   /** 任务唯一标识符 */
   taskId: string
@@ -63,6 +84,8 @@ class BrowserPoolManager {
     resolve: (value: any) => void
     /** Promise失败回调 */
     reject: (reason?: any) => void
+    /** 任务特定配置 */
+    config?: any
   }> = []
   /** 系统配置参数 */
   private config = {
@@ -257,31 +280,41 @@ class BrowserPoolManager {
   }
 
   /** 执行截图任务 */
-  async executeTask(taskData: TaskData): Promise<Buffer> {
+  async executeTask(taskData: TaskData & { config?: any }): Promise<Buffer> {
     if (!this.browser) throw new Error('浏览器未初始化')
+
+    // 应用任务特定的配置（如果提供了的话）
+    const taskConfig = taskData.config || {}
+    const effectiveConfig = { ...this.config, ...taskConfig }
+
     return new Promise((resolve, reject) => {
-      if (this.activeTasks.size >= this.config.maxConcurrent) {
+      if (this.activeTasks.size >= effectiveConfig.maxConcurrent) {
         console.log(
           `[jsxp] 任务 ${taskData.taskId} 进入队列等待，当前活跃任务: ${
             this.activeTasks.size
-          }/${this.config.maxConcurrent}，队列长度: ${
+          }/${effectiveConfig.maxConcurrent}，队列长度: ${
             this.taskQueue.length + 1
           }`
         )
-        this.taskQueue.push({ taskData, resolve, reject })
+        this.taskQueue.push({
+          taskData,
+          resolve,
+          reject,
+          config: effectiveConfig,
+        })
         return
       }
       this.activeTasks.add(taskData.taskId)
       console.log(
-        `[jsxp] 执行任务${taskData.taskId}，当前活跃任务: ${this.activeTasks.size}/${this.config.maxConcurrent}`
+        `[jsxp] 执行任务${taskData.taskId}，当前活跃任务: ${this.activeTasks.size}/${effectiveConfig.maxConcurrent}`
       )
-      this._executeTaskInternal(taskData)
+      this._executeTaskInternal(taskData, effectiveConfig)
         .then(resolve)
         .catch(reject)
         .finally(() => {
           this.activeTasks.delete(taskData.taskId)
           console.log(
-            `[jsxp] 任务${taskData.taskId}执行完成，当前活跃任务: ${this.activeTasks.size}/${this.config.maxConcurrent}`
+            `[jsxp] 任务${taskData.taskId}执行完成，当前活跃任务: ${this.activeTasks.size}/${effectiveConfig.maxConcurrent}`
           )
           setImmediate(() => this._processQueue())
         })
@@ -290,23 +323,30 @@ class BrowserPoolManager {
 
   /** 处理任务队列 */
   private _processQueue(): void {
-    while (
-      this.taskQueue.length > 0 &&
-      this.activeTasks.size < this.config.maxConcurrent
-    ) {
-      const task = this.taskQueue.shift()!
-      const taskId = task.taskData.taskId
+    while (this.taskQueue.length > 0) {
+      const task = this.taskQueue[0] // 查看队列第一个任务但不移除
+      const effectiveConfig = task.config || this.config
+
+      if (this.activeTasks.size >= effectiveConfig.maxConcurrent) {
+        break // 达到并发限制，停止处理
+      }
+
+      // 从队列中移除任务
+      const dequeuedTask = this.taskQueue.shift()!
+      const taskId = dequeuedTask.taskData.taskId
+
       this.activeTasks.add(taskId)
       console.log(
-        `[jsxp] 从队列启动任务${taskId}，当前活跃: ${this.activeTasks.size}/${this.config.maxConcurrent}，队列剩余: ${this.taskQueue.length}`
+        `[jsxp] 从队列启动任务${taskId}，当前活跃: ${this.activeTasks.size}/${effectiveConfig.maxConcurrent}，队列剩余: ${this.taskQueue.length}`
       )
-      this._executeTaskInternal(task.taskData)
-        .then(task.resolve)
-        .catch(task.reject)
+
+      this._executeTaskInternal(dequeuedTask.taskData, effectiveConfig)
+        .then(dequeuedTask.resolve)
+        .catch(dequeuedTask.reject)
         .finally(() => {
           this.activeTasks.delete(taskId)
           console.log(
-            `[jsxp] 队列任务${taskId}完成，当前活跃: ${this.activeTasks.size}/${this.config.maxConcurrent}，队列剩余: ${this.taskQueue.length}`
+            `[jsxp] 队列任务${taskId}完成，当前活跃: ${this.activeTasks.size}/${effectiveConfig.maxConcurrent}，队列剩余: ${this.taskQueue.length}`
           )
           setImmediate(() => this._processQueue())
         })
@@ -314,19 +354,31 @@ class BrowserPoolManager {
   }
 
   /** 内部任务执行方法 */
-  private async _executeTaskInternal(taskData: TaskData): Promise<Buffer> {
-    const timeoutMs = this.config.taskTimeout
+  private async _executeTaskInternal(
+    taskData: TaskData,
+    config: any = this.config
+  ): Promise<Buffer> {
+    const timeoutMs = config.taskTimeout || this.config.taskTimeout
     let page: Page | null = null
     try {
       page = await this._getPageFromPool()
       ;(page as any)._lastUsed = Date.now()
+
+      // 应用配置到页面（如果有视口配置）
+      if (config.viewport) {
+        await page.setViewportSize({
+          width: config.viewport.width || this.config.viewport.width,
+          height: config.viewport.height || this.config.viewport.height,
+        })
+      }
+
       // 根据任务类型选择执行方法
       const result = await Promise.race([
         (async () => {
           if (taskData.type === 'direct') {
-            return await this.executeDirectRender(page!, taskData)
+            return await this.executeDirectRender(page!, taskData, config)
           } else {
-            return await this.executeScreenshot(page!, taskData)
+            return await this.executeScreenshot(page!, taskData, config)
           }
         })(),
         new Promise((_, reject) =>
@@ -346,7 +398,11 @@ class BrowserPoolManager {
   }
 
   /** 执行直接渲染截图操作 */
-  async executeDirectRender(page: Page, taskData: TaskData): Promise<Buffer> {
+  async executeDirectRender(
+    page: Page,
+    taskData: TaskData,
+    config: any = this.config
+  ): Promise<Buffer> {
     const { htmlContent, virtualUrl, PupOptions } = taskData
     const { selector, screenshot } = PupOptions ?? {}
     try {
@@ -356,13 +412,19 @@ class BrowserPoolManager {
         htmlContent!,
         virtualUrl!
       )
+
+      const pageLoadTimeout =
+        config.pageLoadTimeout || this.config.pageLoadTimeout
+      const networkIdleTimeout =
+        config.networkIdleTimeout || this.config.networkIdleTimeout
+
       await page.setContent(modifiedHtml, {
         waitUntil: 'networkidle',
-        timeout: this.config.pageLoadTimeout,
+        timeout: pageLoadTimeout,
       })
       console.log('⏳ 等待页面资源加载完成...')
       await page.waitForLoadState('networkidle', {
-        timeout: this.config.networkIdleTimeout,
+        timeout: networkIdleTimeout,
       })
       const selectorToUse = selector ?? 'body'
       const targetElement = await page.waitForSelector(selectorToUse, {
@@ -398,7 +460,11 @@ class BrowserPoolManager {
   }
 
   /** 执行文件渲染截图操作 */
-  async executeScreenshot(page: Page, taskData: TaskData): Promise<Buffer> {
+  async executeScreenshot(
+    page: Page,
+    taskData: TaskData,
+    config: any = this.config
+  ): Promise<Buffer> {
     const { htmlFilePath, PupOptions } = taskData
     const { goto, selector, screenshot } = PupOptions ?? {}
     try {
@@ -417,9 +483,13 @@ class BrowserPoolManager {
       if (!fs.existsSync(actualFilePath)) {
         throw new Error(`文件不存在: ${actualFilePath}`)
       }
+
+      const pageLoadTimeout =
+        config.pageLoadTimeout || this.config.pageLoadTimeout
+
       await page.goto(fileUrl, {
         waitUntil: 'domcontentloaded',
-        timeout: 3000,
+        timeout: pageLoadTimeout,
         ...(goto ?? {}),
       })
       const selectorToUse = selector ?? 'body'
@@ -600,7 +670,8 @@ class BrowserPoolManager {
       this.taskQueue = []
     }
     let pageCount = 0
-    for (const pages of this.pagePool.values()) {
+    const pageValues = Array.from(this.pagePool.values())
+    for (const pages of pageValues) {
       pageCount += pages.length
       for (const page of pages) {
         await page.close().catch(() => {})

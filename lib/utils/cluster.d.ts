@@ -1,5 +1,17 @@
 import { Page } from 'playwright';
-/** 任务数据结构定义 */
+/**
+ * 任务数据结构定义
+ * @interface TaskData
+ * @property {string} taskId - 任务唯一标识符
+ * @property {'direct' | 'file'} type - 任务类型：direct=直接渲染HTML内容，file=从文件加载
+ * @property {string} [htmlContent] - HTML内容字符串（type为direct时使用）
+ * @property {string} [htmlFilePath] - HTML文件路径（type为file时使用）
+ * @property {string} [virtualUrl] - 虚拟URL，用于资源路径解析
+ * @property {Object} [PupOptions] - Playwright页面选项配置
+ * @property {any} [PupOptions.goto] - 页面导航选项（如timeout、waitUntil等）
+ * @property {string} [PupOptions.selector] - 目标元素选择器，默认为"body"
+ * @property {any} [PupOptions.screenshot] - 截图选项（如quality、type等）
+ */
 interface TaskData {
     /** 任务唯一标识符 */
     taskId: string;
@@ -57,15 +69,17 @@ declare class BrowserPoolManager {
     /** 检查资源是否都在缓存中 */
     checkResourcesInCache(resources: string[]): boolean;
     /** 执行截图任务 */
-    executeTask(taskData: TaskData): Promise<Buffer>;
+    executeTask(taskData: TaskData & {
+        config?: any;
+    }): Promise<Buffer>;
     /** 处理任务队列 */
     private _processQueue;
     /** 内部任务执行方法 */
     private _executeTaskInternal;
     /** 执行直接渲染截图操作 */
-    executeDirectRender(page: Page, taskData: TaskData): Promise<Buffer>;
+    executeDirectRender(page: Page, taskData: TaskData, config?: any): Promise<Buffer>;
     /** 执行文件渲染截图操作 */
-    executeScreenshot(page: Page, taskData: TaskData): Promise<Buffer>;
+    executeScreenshot(page: Page, taskData: TaskData, config?: any): Promise<Buffer>;
     /** 预处理HTML内容用于直接渲染 */
     private prepareHtmlForDirectRender;
     /** 从页面池获取可复用页面 */

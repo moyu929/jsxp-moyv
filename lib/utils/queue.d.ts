@@ -1,4 +1,13 @@
+/**
+ * 全局任务队列
+ * @type {Array<any>}
+ */
 declare const queue: any[];
+/**
+ * 最大并发数
+ * @constant {number}
+ */
+declare const MAX_CONCURRENT = 15;
 /**
  * 添加任务到队列
  */
@@ -13,6 +22,7 @@ export declare const processQueue: () => Promise<void>;
 export declare const getProcessing: () => {
     processingCount: number;
     queueLength: number;
+    maxConcurrent: number;
     isProcessing: boolean;
 };
-export { queue };
+export { queue, MAX_CONCURRENT };

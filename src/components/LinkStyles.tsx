@@ -1,10 +1,18 @@
-import type { FC } from "react";
+import type { FC } from 'react'
 
+/**
+ * LinkStyleSheet组件属性接口
+ * @interface LinkStyleSheetProps
+ * @property {string} src - 样式表文件路径
+ * @property {any} [key] - 其他任意属性
+ */
 interface LinkStyleSheetProps {
-  src: string;
-  [key: string]: any;
+  /** 样式表文件路径 */
+  src: string
+  /** 其他任意属性 */
+  [key: string]: any
 }
 
 export const LinkStyleSheet: FC<LinkStyleSheetProps> = ({ src, ...props }) => (
   <link rel="stylesheet" href={src} {...props} />
-);
+)

@@ -1,9 +1,23 @@
 import type { ComponentCreateOptionType } from '../types.js';
+/**
+ * 编译结果接口
+ * @interface CompileResult
+ * @property {'direct' | 'file'} type - 编译类型
+ * @property {string} [htmlContent] - HTML内容（direct模式）
+ * @property {string} [virtualUrl] - 虚拟URL（direct模式）
+ * @property {string[]} resources - 资源文件列表
+ * @property {string} [htmlFilePath] - HTML文件路径（file模式）
+ */
 interface CompileResult {
+    /** 编译类型 */
     type: 'direct' | 'file';
+    /** HTML内容（direct模式） */
     htmlContent?: string;
+    /** 虚拟URL（direct模式） */
     virtualUrl?: string;
+    /** 资源文件列表 */
     resources: string[];
+    /** HTML文件路径（file模式） */
     htmlFilePath?: string;
 }
 /**
