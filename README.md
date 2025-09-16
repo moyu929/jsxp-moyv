@@ -104,10 +104,6 @@ server.start().then(() => {
 
 定义全局配置。
 
-### `setMaxConcurrent(max: number)`
-
-设置最大并发任务数。
-
 ### `getProcessing()`
 
 获取当前正在处理的任务数量。

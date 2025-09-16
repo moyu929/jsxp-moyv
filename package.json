@@ -7,7 +7,7 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "build": "node bundle.js"
+    "build": "rollup -c rollup.config.js"
   },
   "dependencies": {
     "@types/react": "^18.3.3",
@@ -32,17 +32,12 @@
   },
   "files": [
     "lib/**/*",
-    ".browserrc.cjs",
     "README.md"
   ],
   "exports": {
     ".": {
       "import": "./lib/index.js",
       "types": "./lib/index.d.ts"
-    },
-    "./.browserrc": {
-      "require": "./.browserrc.cjs",
-      "types": "./.browserrc.d.ts"
     },
     "./tsconfig.json": {
       "import": "./tsconfig.json",

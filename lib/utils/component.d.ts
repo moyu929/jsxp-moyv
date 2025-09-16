@@ -1,28 +1,29 @@
-import { ComponentCreateOptionType } from '../types'
-
+import type { ComponentCreateOptionType } from "../types.js";
+interface CompileResult {
+    type: "direct" | "file";
+    htmlContent?: string;
+    virtualUrl?: string;
+    resources: string[];
+    htmlFilePath?: string;
+}
 /**
- * 组件解析器类
- * 负责 TSX 组件的编译和 HTML 路径处理
+ * 组件解析类
  */
 declare class Component {
-  #private
-  constructor()
-  
-  /**
-   * 编译 TSX 组件为 HTML
-   * @param options - 组件创建配置选项
-   * @param taskId - 可选的任务 ID，用于任务追踪
-   * @returns 编译后的 HTML 字符串
-   */
-  compile(options: ComponentCreateOptionType, taskId?: string): string
-  
-  /**
-   * 处理 HTML 中的路径引用
-   * 将相对路径转换为绝对路径或其他需要的格式
-   * @param html - 需要处理的 HTML 字符串
-   * @returns 处理后的 HTML 字符串
-   */
-  processHtmlPaths: (html: string) => string
+    #private;
+    constructor();
+    /**
+     * 编译html（支持缓存检查和直接渲染模式）
+     */
+    compile(options: ComponentCreateOptionType, taskId?: string): Promise<string | CompileResult>;
+    /** 检查资源是否都在缓存中 */
+    checkResourcesInCache(resources: string[]): Promise<boolean>;
+    /**
+     * 处理html路径并提取本地资源文件名
+     */
+    processHtmlPaths: (html: string, server?: boolean) => {
+        html: string;
+        resources: string[];
+    };
 }
-
-export { Component }
+export { Component };
