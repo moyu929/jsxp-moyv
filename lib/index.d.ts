@@ -16,9 +16,31 @@ type ComponentCreateOptionType = {
     /** 可被浏览器渲染的完整 React 组件 */
     component: React$1.ReactNode;
 };
+/**
+ * JSXP 工程配置选项
+ * 用于配置整个截图服务的全局选项
+ */
+type JSXPOptions = {
+    /** 服务器端口号 */
+    port?: number;
+    /** 基础路径 */
+    path?: string;
+    /** 服务器主机地址 */
+    host?: string;
+    /** URL 前缀 */
+    prefix?: string;
+    /** 静态文件目录路径 */
+    statics?: string | string[];
+    /** 路由配置 */
+    routes?: {
+        [key: string]: {
+            component?: React$1.ReactNode;
+        };
+    };
+};
 
 interface CompileResult {
-    type: "direct" | "file";
+    type: 'direct' | 'file';
     htmlContent?: string;
     virtualUrl?: string;
     resources: string[];
@@ -78,10 +100,11 @@ declare const LinkESM: FC<LinkESMProps>;
  */
 declare const LinkESMFile: FC<LinkESMFileProps>;
 
-declare const createServer: (options?: any) => {
-    start: () => Promise<void>;
-    stop: () => Promise<void>;
-};
+/**
+ * 创建服务器
+ * @param userConfig 用户自定义配置，会覆盖默认配置
+ */
+declare function createServer(userConfig?: Partial<JSXPOptions>): Promise<void>;
 
 interface PupOptions {
     goto?: any;

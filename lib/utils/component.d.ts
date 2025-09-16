@@ -1,6 +1,6 @@
-import type { ComponentCreateOptionType } from "../types.js";
+import type { ComponentCreateOptionType } from '../types.js';
 interface CompileResult {
-    type: "direct" | "file";
+    type: 'direct' | 'file';
     htmlContent?: string;
     virtualUrl?: string;
     resources: string[];

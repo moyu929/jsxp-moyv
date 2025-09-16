@@ -1,31 +1,31 @@
-import { renderToString } from "react-dom/server";
-import { mkdirSync, writeFileSync, existsSync, renameSync } from "fs";
-import { join } from "path";
+import { renderToString } from 'react-dom/server'
+import { mkdirSync, writeFileSync, existsSync, renameSync } from 'fs'
+import { join } from 'path'
 import {
   findAndLockReusableFile,
   releaseReusableLock,
   startCleanupTimer,
-} from "./taskmanager";
-import { getBrowserPoolManager } from "./cluster";
-import type { ComponentCreateOptionType } from "../types.js";
+} from './taskmanager'
+import { getBrowserPoolManager } from './cluster'
+import type { ComponentCreateOptionType } from '../types.js'
 
 interface CompileResult {
-  type: "direct" | "file";
-  htmlContent?: string;
-  virtualUrl?: string;
-  resources: string[];
-  htmlFilePath?: string;
+  type: 'direct' | 'file'
+  htmlContent?: string
+  virtualUrl?: string
+  resources: string[]
+  htmlFilePath?: string
 }
 
 /**
  * 组件解析类
  */
 class Component {
-  #dir: string = "";
-  #cleanupStarted: boolean = false;
+  #dir: string = ''
+  #cleanupStarted: boolean = false
 
   constructor() {
-    this.#dir = join(process.cwd(), ".data", "component");
+    this.#dir = join(process.cwd(), '.data', 'component')
   }
 
   /**
@@ -35,87 +35,87 @@ class Component {
     options: ComponentCreateOptionType,
     taskId?: string
   ): Promise<string | CompileResult> {
-    const DOCTYPE = "<!DOCTYPE html>";
-    const HTML = renderToString(options.component);
-    const html = `${DOCTYPE}${HTML}`;
+    const DOCTYPE = '<!DOCTYPE html>'
+    const HTML = renderToString(options.component)
+    const html = `${DOCTYPE}${HTML}`
 
     // create false 模式
-    if (typeof options?.create === "boolean" && options?.create === false) {
-      if (options.server === true) return this.processHtmlPaths(html).html;
-      return html;
+    if (typeof options?.create === 'boolean' && options?.create === false) {
+      if (options.server === true) return this.processHtmlPaths(html).html
+      return html
     }
 
     // create true - HTML生成逻辑（新增缓存检查）
-    const processedResult = this.processHtmlPaths(html, options.server);
-    const requiredResources = processedResult.resources;
+    const processedResult = this.processHtmlPaths(html, options.server)
+    const requiredResources = processedResult.resources
     const canUseDirectRender = await this.checkResourcesInCache(
       requiredResources
-    );
+    )
 
     if (canUseDirectRender && requiredResources.length > 0) {
       console.log(
         `[jsxp] 资源已缓存，使用直接渲染模式，资源数量: ${requiredResources.length}`
-      );
+      )
       return {
-        type: "direct",
+        type: 'direct',
         htmlContent: html,
         virtualUrl: `http://localhost/virtual-${taskId}.html`,
         resources: requiredResources,
-      };
+      }
     }
 
     // 原有的文件创建逻辑
-    const dir = join(this.#dir, options?.path ?? "");
-    mkdirSync(dir, { recursive: true });
+    const dir = join(this.#dir, options?.path ?? '')
+    mkdirSync(dir, { recursive: true })
 
     if (!this.#cleanupStarted) {
-      startCleanupTimer(dir);
-      this.#cleanupStarted = true;
+      startCleanupTimer(dir)
+      this.#cleanupStarted = true
     }
 
-    let fileName = taskId ?? "jsxp";
-    if (!fileName.endsWith(".html")) fileName = `${fileName}.html`;
-    const address = join(dir, fileName);
-    const processedHtml = processedResult.html;
+    let fileName = taskId ?? 'jsxp'
+    if (!fileName.endsWith('.html')) fileName = `${fileName}.html`
+    const address = join(dir, fileName)
+    const processedHtml = processedResult.html
 
     // 尝试复用已完成任务的文件
-    const reusableFile = findAndLockReusableFile(dir);
+    const reusableFile = findAndLockReusableFile(dir)
     if (reusableFile) {
-      const oldPath = join(dir, reusableFile);
+      const oldPath = join(dir, reusableFile)
       try {
-        writeFileSync(oldPath, processedHtml);
-        renameSync(oldPath, address);
-        releaseReusableLock(oldPath);
+        writeFileSync(oldPath, processedHtml)
+        renameSync(oldPath, address)
+        releaseReusableLock(oldPath)
         return {
-          type: "file",
+          type: 'file',
           htmlFilePath: address,
           resources: requiredResources,
-        };
+        }
       } catch (error) {
-        console.error("[jsxp] 文件复用失败，创建新文件:", error);
-        releaseReusableLock(oldPath);
+        console.error('[jsxp] 文件复用失败，创建新文件:', error)
+        releaseReusableLock(oldPath)
       }
     }
 
     // 没有可复用文件或复用失败时，创建新文件
-    writeFileSync(address, processedHtml);
-    console.log(`[jsxp] 使用文件模式，资源数量: ${requiredResources.length}`);
+    writeFileSync(address, processedHtml)
+    console.log(`[jsxp] 使用文件模式，资源数量: ${requiredResources.length}`)
     return {
-      type: "file",
+      type: 'file',
       htmlFilePath: address,
       resources: requiredResources,
-    };
+    }
   }
 
   /** 检查资源是否都在缓存中 */
   async checkResourcesInCache(resources: string[]): Promise<boolean> {
-    if (!resources || resources.length === 0) return true;
+    if (!resources || resources.length === 0) return true
     try {
-      const manager = await getBrowserPoolManager();
-      return manager.checkResourcesInCache(resources);
+      const manager = await getBrowserPoolManager()
+      return manager.checkResourcesInCache(resources)
     } catch (error) {
-      console.error("[jsxp] 检查资源缓存失败:", error);
-      return false;
+      console.error('[jsxp] 检查资源缓存失败:', error)
+      return false
     }
   }
 
@@ -123,53 +123,53 @@ class Component {
    * 处理html路径并提取本地资源文件名
    */
   processHtmlPaths = (html: string, server: boolean = false) => {
-    const resources = new Set<string>();
+    const resources = new Set<string>()
     // 组合正则表达式，同时匹配属性和url()
     const combinedRegex =
-      /((src|href)=["']([^"']+)["'])|(url\(["']?([^"')]+)["']?\))/g;
+      /((src|href)=["']([^"']+)["'])|(url\(["']?([^"')]+)["']?\))/g
 
     html = html.replace(
       combinedRegex,
       (match, fullAttr, attrType, attrLink, fullUrl, urlLink) => {
         if (fullAttr) {
           // 处理src/href属性
-          const url = decodeURIComponent(attrLink);
+          const url = decodeURIComponent(attrLink)
           if (existsSync(url)) {
-            const fileName = attrLink.split("/").pop()?.split("\\").pop() || "";
-            resources.add(fileName);
+            const fileName = attrLink.split('/').pop()?.split('\\').pop() || ''
+            resources.add(fileName)
             // 只有当服务器模式时才修改URL
             if (server) {
-              const newPath = `/files?path=${encodeURIComponent(attrLink)}`;
-              return `${attrType}="${newPath}"`;
+              const newPath = `/files?path=${encodeURIComponent(attrLink)}`
+              return `${attrType}="${newPath}"`
             }
           }
         } else if (fullUrl) {
           // 处理url()引用
-          const url = decodeURIComponent(urlLink);
+          const url = decodeURIComponent(urlLink)
           if (existsSync(url)) {
-            const fileName = urlLink.split("/").pop()?.split("\\").pop() || "";
-            resources.add(fileName);
+            const fileName = urlLink.split('/').pop()?.split('\\').pop() || ''
+            resources.add(fileName)
             // 只有当服务器模式时才修改URL
             if (server) {
-              const newPath = `/files?path=${encodeURIComponent(urlLink)}`;
-              return `url(${newPath})`;
+              const newPath = `/files?path=${encodeURIComponent(urlLink)}`
+              return `url(${newPath})`
             }
           }
         }
-        return match;
+        return match
       }
-    );
+    )
 
     console.log(
       `[jsxp] 处理路径并提取到 ${resources.size} 个资源文件:`,
       Array.from(resources)
-    );
+    )
 
     return {
       html,
       resources: Array.from(resources),
-    };
-  };
+    }
+  }
 }
 
-export { Component };
+export { Component }
