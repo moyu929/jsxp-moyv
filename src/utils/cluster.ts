@@ -7,13 +7,6 @@ let browserPoolInstance: BrowserPoolManager | null = null
 
 /**
  * 资源缓存项接口
- * @interface ResourceCacheItem
- * @property {Buffer} body - 资源内容，存储为Buffer格式
- * @property {Record<string, string>} headers - HTTP响应头信息
- * @property {number} [status] - HTTP状态码（可选）
- * @property {number} usageCount - 使用次数
- * @property {number} createdAt - 加入时间戳
- * @property {number} lastUsedAt - 最后使用时间
  */
 interface ResourceCacheItem {
   /** 资源内容，存储为Buffer格式 */
@@ -26,22 +19,10 @@ interface ResourceCacheItem {
   usageCount: number
   /** 加入时间戳 */
   createdAt: number
-  /** 最后使用时间 */
-  lastUsedAt: number
 }
 
 /**
  * 任务数据结构定义
- * @interface TaskData
- * @property {string} taskId - 任务唯一标识符
- * @property {'direct' | 'file'} type - 任务类型：direct=直接渲染HTML内容，file=从文件加载
- * @property {string} [htmlContent] - HTML内容字符串（type为direct时使用）
- * @property {string} [htmlFilePath] - HTML文件路径（type为file时使用）
- * @property {string} [virtualUrl] - 虚拟URL，用于资源路径解析
- * @property {Object} [PupOptions] - Playwright页面选项配置
- * @property {any} [PupOptions.goto] - 页面导航选项（如timeout、waitUntil等）
- * @property {string} [PupOptions.selector] - 目标元素选择器，默认为"body"
- * @property {any} [PupOptions.screenshot] - 截图选项（如quality、type等）
  */
 interface TaskData {
   /** 任务唯一标识符 */
@@ -284,15 +265,17 @@ class BrowserPoolManager {
       const fileName = this.extractFileName(url)
       if (this.resourceCache.has(fileName)) {
         const cachedResource = this.resourceCache.get(fileName)!
-        // 更新使用次数和最后使用时间
+        // 更新使用次数
         cachedResource.usageCount += 1
-        cachedResource.lastUsedAt = Date.now()
         this.resourceCache.set(fileName, cachedResource)
 
         await route.fulfill({
           status: cachedResource.status || 200,
           body: cachedResource.body,
-          headers: cachedResource.headers,
+          headers: {
+            ...cachedResource.headers,
+            'x-cache-hit': 'true', // 标记为缓存返回的响应
+          },
         })
         // console.log(
         //   `[jsxp] ✅ [缓存命中] ${fileName} (使用次数: ${cachedResource.usageCount})`
@@ -308,6 +291,8 @@ class BrowserPoolManager {
     this.context.on('response', async (response) => {
       const url = response.url()
       if (!this.isStaticResource(url)) return
+      // 检查是否是缓存返回的响应，避免重复缓存
+      if (response.headers()['x-cache-hit'] == 'true') return
       const fileName = this.extractFileName(url)
       // 只缓存成功的响应
       if (response.status() >= 200 && response.status() < 300) {
@@ -320,14 +305,15 @@ class BrowserPoolManager {
             status: response.status(),
             usageCount: 0,
             createdAt: Date.now(),
-            lastUsedAt: Date.now(),
           })
           this.totalCacheSize += body.length
-          // console.log(
-          //   `[jsxp] 💾 资源缓存成功: ${fileName} (当前总缓存: ${Math.round(
-          //     this.totalCacheSize / 1024 / 1024
-          //   )}MB)`
-          // )
+          console.log(
+            `[jsxp] 💾 资源缓存成功: ${fileName} (大小：${Math.round(
+              body.length / 1024 / 1024
+            )}MB，当前总缓存: ${Math.round(
+              this.totalCacheSize / 1024 / 1024
+            )}MB)`
+          )
           // 检查是否需要清理缓存
           this._checkAndCleanupCache()
         } catch (error) {
