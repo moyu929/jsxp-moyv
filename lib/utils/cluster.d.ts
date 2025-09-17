@@ -46,8 +46,16 @@ declare class BrowserPoolManager {
     private activeTasks;
     /** 任务等待队列 */
     private taskQueue;
-    /** 系统配置参数 */
+    /** 系统默认配置参数 */
+    private defaultConfig;
+    /** 当前生效的配置 */
     private config;
+    /** 渲染计数器 */
+    private renderCount;
+    /** 最大渲染次数后重启浏览器 */
+    private maxRenderCountBeforeRestart;
+    /** 浏览器操作锁，防止并发关闭/重启 */
+    private isLocked;
     /** 页面复用池 */
     private pagePool;
     /** 页面清理定时器 */
@@ -57,7 +65,7 @@ declare class BrowserPoolManager {
     /** 缓存总大小（字节） */
     private totalCacheSize;
     /** 初始化浏览器 */
-    init(): Promise<void>;
+    init(config?: any): Promise<void>;
     /** 为浏览器设置全局路由拦截器 */
     setupGlobalRouteInterceptor(): Promise<void>;
     /** 判断是否为静态资源 */
@@ -90,13 +98,17 @@ declare class BrowserPoolManager {
     private _cleanPageState;
     /** 清理空闲时间过长的页面 */
     private _cleanupIdlePages;
+    /** 重启浏览器 */
+    restartBrowser(): Promise<void>;
     /** 关闭浏览器 */
-    close(): Promise<void>;
+    close(isRestart?: boolean): Promise<void>;
+    /** 合并配置 */
+    private mergeConfig;
     /** 检查并清理缓存 */
     private _checkAndCleanupCache;
     /** 执行缓存清理 */
     private _cleanupCache;
 }
 /** 获取浏览器池管理器实例 */
-declare const getBrowserPoolManager: () => Promise<BrowserPoolManager>;
+declare const getBrowserPoolManager: (config?: any) => Promise<BrowserPoolManager>;
 export { BrowserPoolManager, getBrowserPoolManager };

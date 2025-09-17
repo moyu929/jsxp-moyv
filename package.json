@@ -45,6 +45,7 @@
       "types": "./lib/index.d.ts"
     },
     "./.browserrc.cjs": {
+      "require": "./.browserrc.cjs",
       "import": "./.browserrc.cjs",
       "types": "./.browserrc.cjs"
     }

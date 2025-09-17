@@ -174,10 +174,10 @@ class Component {
       }
     )
 
-    console.log(
-      `[jsxp] 处理路径并提取到 ${resources.size} 个资源文件:`,
-      Array.from(resources)
-    )
+    // console.log(
+    //   `[jsxp] 处理路径并提取到 ${resources.size} 个资源文件:`,
+    //   Array.from(resources)
+    // )
 
     return {
       html,
